@@ -14,7 +14,7 @@ getgenv().silentAim = {
         Color = Color3.fromRGB(255, 255, 255), -- Color of the FOV circle
         Thickness = 1,     -- Thickness of the FOV circle
 	},
-	Keybind = "RightShift" -- Key to toggle the FOV circle visibility
+    -- Keybind = "RightShift" has been removed.
 };
 
 -- Silent Aim Core Logic (FIXED VARARG ISSUE)
@@ -212,6 +212,8 @@ do
             end
         end);
 
+        -- The following UserInputService.InputBegan block was removed:
+        --[[
         UserInputService.InputBegan:Connect(function(Input)
             local SA_CFG = getgenv().silentAim;
             local key = Enum.KeyCode[SA_CFG.Keybind] or Enum.KeyCode.RightShift;
@@ -220,5 +222,6 @@ do
                 SA_CFG.Fov.Visible = not SA_CFG.Fov.Visible;
             end;
         end);
+        --]]
     end
 end
