@@ -1,101 +1,83 @@
--- // Project Delta Silent Aim. (This Will Make Your Bullets Faster As I Remove Drag From The Bulltes.)
+-- // Project Delta Silent Aim
 -- // Services
-local runService = game:GetService('RunService')
-local userInputService = game:GetService('UserInputService')
-local httpService = game:GetService('HttpService')
-local replicatedStorage = game:GetService('ReplicatedStorage')
-local players = game:GetService('Players')
+local RunService = game:GetService('RunService')
+local UserInputService = game:GetService('UserInputService')
+local ReplicatedStorage = game:GetService('ReplicatedStorage')
+local Players = game:GetService('Players')
 
 -- // Variables
-local localPlayer = players.LocalPlayer
-local camera = workspace.CurrentCamera
-local aiZones = workspace.AiZones
-local success, bullet = pcall(require, replicatedStorage.Modules.FPS.Bullet)
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+local AiZones = workspace:FindFirstChild("AiZones")
+local success, Bullet = pcall(require, ReplicatedStorage.Modules.FPS.Bullet)
 
 if not hookfunction then
-    return localPlayer:Kick("Executor Dosen't Have hookfunction.")
+    return LocalPlayer:Kick("Executor doesn't have hookfunction.")
 end
 
 if not Drawing then
-    return localPlayer:Kick("Executor Dosen't Have Drawing.")
+    return LocalPlayer:Kick("Executor doesn't have Drawing.")
 end
 
 if not success then
-    return localPlayer:Kick(
-        "Could't Require Bullet Module. Make Sure The Game Is Loaded"
-    )
+    return LocalPlayer:Kick("Couldn't require Bullet module. Make sure the game is loaded.")
 end
 
 -- ====================================================================
 -- // GETENV CONFIGURATION
--- All settings are now controlled via getgenv().silentAim
 -- ====================================================================
 getgenv().silentAim = {
-    Enabled = true, -- Toggles the silent aim logic on/off
-    WallCheck = true, -- If true, only targets visible targets
-    HitPart = 'Head', -- Target body part ("Head" or "HumanoidRootPart")
-    Prediction = true, -- Toggles movement prediction
+    Enabled = true,
+    WallCheck = true,
+    HitPart = 'Head',
+    Prediction = true,
     Fov = {
-        Visible = false, -- Toggles the FOV circle visualization
-        Radius = 600, -- Radius of the FOV circle (pixels)
-        Color = Color3.fromRGB(255, 255, 255), -- Color of the FOV circle
-        Thickness = 1, -- Thickness of the FOV circle
+        Visible = false,
+        Radius = 600,
+        Color = Color3.fromRGB(255, 255, 255),
+        Thickness = 1,
     },
-    Keybind = 'RightShift', -- Key to toggle the FOV circle visibility (if Visible is true)
+    Keybind = 'RightShift',
     TargetInfo = {
-        Enabled = true, -- Toggles the visibility of the target info panel
-        Position = Vector2.new(20, 100), -- Screen position of the panel (X, Y)
-        TextSize = 14, -- Font size for the text
-        Font = 2, -- Font style (2 is Monospace)
-        Color = Color3.fromRGB(255, 255, 255), -- White text
+        Enabled = true,
+        Position = Vector2.new(20, 100),
+        TextSize = 14,
+        Font = 2,
+        Color = Color3.fromRGB(255, 255, 255),
     },
 }
 
--- // DRAWINGS (Only used for the FOV Circle)
-local drawings = {}
+-- // DRAWINGS
+local DrawingsList = {}
 local FOVCircle = nil
-
--- // Target Info Drawing Table
 local TargetInfoDrawings = {}
 
--- // Functions
-local function draw(drawingType, properties)
-    local drawing = Drawing.new(drawingType)
-    drawings[#drawings + 1] = drawing
-    for index, value in properties do
-        drawing[index] = value
+local function draw(Type, Properties)
+    local D = Drawing.new(Type)
+    table.insert(DrawingsList, D)
+    for i, v in pairs(Properties) do
+        D[i] = v
     end
-    return drawing
+    return D
 end
 
-local function isAlive(player)
-    if
-        player
-        and player.Character
-        and player.Character:FindFirstChild('HumanoidRootPart')
-        and player.Character:FindFirstChild('Humanoid')
-        and player.Character.Humanoid.Health > 0
-    then
-        return true
-    end
-    return false
+local function isAlive(Player)
+    return Player and Player.Character and Player.Character:FindFirstChild('HumanoidRootPart') and Player.Character:FindFirstChild('Humanoid') and Player.Character.Humanoid.Health > 0
 end
 
--- This function is a vararg function and correctly uses '...'
-local function isVisible(origin, target, ...)
-    local ignore = { camera, ... }
-
-    if isAlive(localPlayer) then
-        ignore[#ignore + 1] = localPlayer.Character
+local function isVisible(Origin, Target, ...)
+    local ignore = {Camera, ...}
+    if isAlive(LocalPlayer) then
+        table.insert(ignore, LocalPlayer.Character)
     end
 
     local hit = workspace:FindPartOnRayWithIgnoreList(
-        Ray.new(origin, target.Position - origin),
+        Ray.new(Origin, Target.Position - Origin),
         ignore,
         false,
         true
     )
-    if hit and hit:IsDescendantOf(target.Parent) then
+    if hit and hit:IsDescendantOf(Target.Parent) then
         return true
     end
     return false
@@ -103,241 +85,114 @@ end
 
 local function getAi()
     local ai = {}
-
-    if not aiZones then
-        return ai
-    end -- Added check for aiZones
-
-    for _, v in aiZones:GetChildren() do
-        for _, character in v:GetChildren() do
-            ai[#ai + 1] = character
+    if not AiZones then return ai end
+    for _, zone in pairs(AiZones:GetChildren()) do
+        for _, character in pairs(zone:GetChildren()) do
+            table.insert(ai, character)
         end
     end
-
     return ai
 end
 
 local function getTarget(...)
-    -- Read configuration directly from getgenv()
     local SA_CFG = getgenv().silentAim
-    local cloestTarget, closestDistance = nil, SA_CFG.Fov.Radius
+    local closestTarget, closestDistance = nil, SA_CFG.Fov.Radius
+    local ignoreArgs = {...} -- capture varargs to avoid upvalue issues
 
-    -- FIX: Capture varargs into a table to bypass strict interpreter rules on nested function scope
-    local ignoreArgs = { ... }
+    local function checkTarget(Character, IsPlayer)
+        if not Character:FindFirstChild('HumanoidRootPart') then return end
+        local HitPart = Character:FindFirstChild(SA_CFG.HitPart)
+        if not HitPart then return end
 
-    local function checkTarget(character, isPlayer)
-        if not character:FindFirstChild('HumanoidRootPart') then
+        if SA_CFG.WallCheck and not isVisible(Camera.CFrame.Position, HitPart, table.unpack(ignoreArgs)) then
             return
         end
 
-        local hitPart = character:FindFirstChild(SA_CFG.HitPart)
-        if not hitPart then
-            return
-        end
+        local screenPos, onScreen = Camera:WorldToViewportPoint(HitPart.Position)
+        if not onScreen then return end
 
-        -- Use table.unpack() to pass the captured arguments instead of relying on '...' scope
-        if
-            SA_CFG.WallCheck
-            and not isVisible(
-                camera.CFrame.Position,
-                hitPart,
-                table.unpack(ignoreArgs)
-            )
-        then
-            return
-        end
-
-        local screenPosition, onScreen =
-            camera:WorldToViewportPoint(hitPart.Position)
-        if not onScreen then
-            return
-        end
-
-        local distance = (
-            Vector2.new(screenPosition.X, screenPosition.Y)
-            - userInputService:GetMouseLocation()
-        ).Magnitude
+        local distance = (Vector2.new(screenPos.X, screenPos.Y) - UserInputService:GetMouseLocation()).Magnitude
         if distance < closestDistance then
             closestDistance = distance
-            -- Store the HitPart and the full Character model/instance
-            cloestTarget = {
-                HitPart = hitPart,
-                Character = character,
-                IsPlayer = isPlayer,
-                Distance = math.floor(distance),
+            closestTarget = {
+                HitPart = HitPart,
+                Character = Character,
+                IsPlayer = IsPlayer,
+                Distance = math.floor(distance)
             }
         end
     end
 
-    for _, character in getAi() do
+    for _, character in pairs(getAi()) do
         checkTarget(character, false)
     end
 
-    for index, player in players:GetPlayers() do
-        if player == localPlayer then -- Check explicitly against localPlayer object
-            continue
-        end
-
-        if not isAlive(player) then
-            continue
-        end
-
+    for _, player in pairs(Players:GetPlayers()) do
+        if player == LocalPlayer then continue end
+        if not isAlive(player) then continue end
         checkTarget(player.Character, true)
     end
 
-    return cloestTarget
+    return closestTarget
 end
 
 local function solveQuadratic(A, B, C)
-    local discriminant = B ^ 2 - 4 * A * C
-    if discriminant < 0 then
-        return nil, nil
-    end
-
-    local discRoot = math.sqrt(discriminant)
-    local root1 = (-B - discRoot) / (2 * A)
-    local root2 = (-B + discRoot) / (2 * A)
-
-    return root1, root2
+    local disc = B^2 - 4*A*C
+    if disc < 0 then return nil, nil end
+    local sqrtDisc = math.sqrt(disc)
+    local r1 = (-B - sqrtDisc) / (2*A)
+    local r2 = (-B + sqrtDisc) / (2*A)
+    return r1, r2
 end
 
-local function getBallisticFlightTime(direction, gravity, projectileSpeed)
-    local root1, root2 = solveQuadratic(
-        gravity:Dot(gravity) / 4,
-        gravity:Dot(direction) - projectileSpeed ^ 2,
-        direction:Dot(direction)
-    )
-
-    if root1 and root2 then
-        if root1 > 0 and root1 < root2 then
-            return math.sqrt(root1)
-        elseif root2 > 0 and root2 < root1 then
-            return math.sqrt(root2)
-        end
+local function getBallisticFlightTime(Direction, Gravity, Speed)
+    local r1, r2 = solveQuadratic(Gravity:Dot(Gravity)/4, Gravity:Dot(Direction) - Speed^2, Direction:Dot(Direction))
+    if r1 and r2 then
+        if r1 > 0 and r1 < r2 then return math.sqrt(r1) end
+        if r2 > 0 and r2 < r1 then return math.sqrt(r2) end
     end
-
     return 0
 end
 
-local function projectileDrop(origin, target, projectileSpeed, acceleration)
-    local gravity = Vector3.new() + Vector3.yAxis * (acceleration * 2)
-    local time =
-        getBallisticFlightTime(target - origin, gravity, projectileSpeed)
-
-    return 0.5 * gravity * time ^ 2
+local function projectileDrop(Origin, Target, Speed, Acceleration)
+    local Gravity = Vector3.new(0, Acceleration * 2, 0)
+    local time = getBallisticFlightTime(Target - Origin, Gravity, Speed)
+    return 0.5 * Gravity * time^2
 end
 
-local function predict(target, origin, projectileSpeed, acceleration)
-    local gravity = Vector3.new() + Vector3.yAxis * (acceleration * 2)
-    local time = getBallisticFlightTime(
-        target.Position - origin,
-        gravity,
-        projectileSpeed
-    )
-
-    return target.Position + (target.Velocity * time)
+local function predict(Target, Origin, Speed, Acceleration)
+    local Gravity = Vector3.new(0, Acceleration * 2, 0)
+    local time = getBallisticFlightTime(Target.Position - Origin, Gravity, Speed)
+    return Target.Position + (Target.Velocity * time)
 end
 
--- // Hooks
+-- // HOOK
 local oldBullet
-oldBullet = hookfunction(
-    bullet.CreateBullet,
-    function(
-        idk,
-        model,
-        model2,
-        model3,
-        aimPart,
-        idk2,
-        ammoType,
-        tick,
-        recoilPattern
-    )
-        -- Read configuration directly from getgenv()
-        local SA_CFG = getgenv().silentAim
-
-        if not SA_CFG.Enabled then
-            return oldBullet(
-                idk,
-                model,
-                model2,
-                model3,
-                aimPart,
-                idk2,
-                ammoType,
-                tick,
-                recoilPattern
-            )
-        end
-
-        local targetStruct = getTarget(model, model2, model3, aimPart)
-        if targetStruct then
-            local target = targetStruct.HitPart -- Use the HitPart for aiming
-            local bullet = replicatedStorage.AmmoTypes:FindFirstChild(ammoType)
-            local acceleration = bullet:GetAttribute('ProjectileDrop')
-            local projectileSpeed = bullet:GetAttribute('MuzzleVelocity')
-
-            bullet:SetAttribute('Drag', 0) -- Remove drag for simpler time calculation
-
-            local targetPosition = (
-                SA_CFG.Prediction
-                and predict(
-                    target,
-                    aimPart.Position,
-                    projectileSpeed,
-                    acceleration
-                )
-            )
-                or (not SA_CFG.Prediction and target.Position)
-
-            local vertical = projectileDrop(
-                aimPart.Position,
-                targetPosition,
-                projectileSpeed,
-                acceleration
-            )
-            local new = {
-                ['CFrame'] = CFrame.new(
-                    aimPart.Position,
-                    targetPosition + vertical
-                ), -- They Only Check The CFrame For This Arg.
-            }
-
-            return oldBullet(
-                idk,
-                model,
-                model2,
-                model3,
-                new,
-                idk2,
-                ammoType,
-                tick,
-                recoilPattern
-            ) -- Replace the aimPart With A Table Contaning CFrame So We Don't Modify The AimPart.
-        end
-
-        return oldBullet(
-            idk,
-            model,
-            model2,
-            model3,
-            aimPart,
-            idk2,
-            ammoType,
-            tick,
-            recoilPattern
-        )
-    end
-)
-
--- ====================================================================
--- // TARGET INFO DISPLAY INITIALIZATION
--- ====================================================================
-
--- Helper function to create a text line with offset
-local function createInfoLine(yOffset)
+oldBullet = hookfunction(Bullet.CreateBullet, function(idk, model, model2, model3, aimPart, idk2, ammoType, tick, recoilPattern)
     local SA_CFG = getgenv().silentAim
-    local TI_CFG = SA_CFG.TargetInfo
+    if not SA_CFG.Enabled then return oldBullet(idk, model, model2, model3, aimPart, idk2, ammoType, tick, recoilPattern) end
+
+    local targetStruct = getTarget(model, model2, model3, aimPart)
+    if targetStruct then
+        local target = targetStruct.HitPart
+        local bulletObj = ReplicatedStorage.AmmoTypes:FindFirstChild(ammoType)
+        local acceleration = bulletObj:GetAttribute('ProjectileDrop')
+        local projectileSpeed = bulletObj:GetAttribute('MuzzleVelocity')
+        bulletObj:SetAttribute('Drag', 0)
+
+        local targetPosition = SA_CFG.Prediction and predict(target, aimPart.Position, projectileSpeed, acceleration) or target.Position
+        local vertical = projectileDrop(aimPart.Position, targetPosition, projectileSpeed, acceleration)
+        local newAim = {['CFrame'] = CFrame.new(aimPart.Position, targetPosition + vertical)}
+
+        return oldBullet(idk, model, model2, model3, newAim, idk2, ammoType, tick, recoilPattern)
+    end
+
+    return oldBullet(idk, model, model2, model3, aimPart, idk2, ammoType, tick, recoilPattern)
+end)
+
+-- // TARGET INFO DRAWINGS
+local function createInfoLine(yOffset)
+    local TI_CFG = getgenv().silentAim.TargetInfo
     local line = draw('Text', {
         Visible = false,
         Text = '',
@@ -346,32 +201,25 @@ local function createInfoLine(yOffset)
         Size = TI_CFG.TextSize,
         Outline = true,
         Position = TI_CFG.Position + Vector2.new(0, yOffset),
-        ZIndex = 101, -- Higher than FOV circle
+        ZIndex = 101,
     })
     return line
 end
 
--- Initialize the Drawing objects for target info
 TargetInfoDrawings.Title = createInfoLine(0)
 TargetInfoDrawings.Name = createInfoLine(15)
 TargetInfoDrawings.Health = createInfoLine(30)
 TargetInfoDrawings.Visible = createInfoLine(45)
 TargetInfoDrawings.Distance = createInfoLine(60)
+TargetInfoDrawings.Title.Text = "Target Info"
 
-TargetInfoDrawings.Title.Text = 'Target Info'
-
--- Function to set visibility of all info lines
-local function setTargetInfoVisibility(visible)
-    for _, drawing in pairs(TargetInfoDrawings) do
-        drawing.Visible = visible
+local function setTargetInfoVisibility(Visible)
+    for _, D in pairs(TargetInfoDrawings) do
+        D.Visible = Visible
     end
 end
 
--- ====================================================================
--- // FOV CIRCLE AND TARGET INFO UPDATE LOOP
--- ====================================================================
-
--- Initialize FOV Circle
+-- // FOV Circle
 FOVCircle = draw('Circle', {
     Visible = false,
     Filled = false,
@@ -379,74 +227,51 @@ FOVCircle = draw('Circle', {
     Color = getgenv().silentAim.Fov.Color,
     Thickness = getgenv().silentAim.Fov.Thickness,
     Transparency = 1,
-    ZIndex = 100, -- High ZIndex to ensure visibility
+    ZIndex = 100,
 })
 
--- Update Loop
-runService.Heartbeat:Connect(function()
+-- // UPDATE LOOP
+RunService.Heartbeat:Connect(function()
     local SA_CFG = getgenv().silentAim
     local FOV_CFG = SA_CFG.Fov
     local TI_CFG = SA_CFG.TargetInfo
 
     FOVCircle.Visible = SA_CFG.Enabled and FOV_CFG.Visible
     if FOV_CFG.Visible then
-        FOVCircle.Position = userInputService:GetMouseLocation()
+        FOVCircle.Position = UserInputService:GetMouseLocation()
         FOVCircle.Radius = FOV_CFG.Radius
         FOVCircle.Color = FOV_CFG.Color
         FOVCircle.Thickness = FOV_CFG.Thickness
     end
 
-    -- TARGET INFO LOGIC
-    local targetStruct = getTarget() -- Find the target without passing hook arguments
-    -- FIX: Ensure targetFound is a strict boolean (true/false) by checking if targetStruct is non-nil.
-    -- This prevents passing a table or nil to the drawing visibility setter.
-    local targetFound = SA_CFG.Enabled
-        and TI_CFG.Enabled
-        and (targetStruct ~= nil)
-
+    local targetStruct = getTarget()
+    local targetFound = SA_CFG.Enabled and TI_CFG.Enabled and (targetStruct ~= nil)
     setTargetInfoVisibility(targetFound)
 
     if targetFound then
-        local targetCharacter = targetStruct.Character
-        local targetHumanoid = targetCharacter:FindFirstChildOfClass('Humanoid')
-        -- Use the target's name property directly; GetNameFromUserIdAsync is slow and prone to errors
-        local name = targetCharacter.Name
+        local targetChar = targetStruct.Character
+        local targetHum = targetChar:FindFirstChildOfClass('Humanoid')
+        local name = targetChar.Name
         if targetStruct.IsPlayer then
-            local playerObject = players:FindFirstChild(targetCharacter.Name)
-            if playerObject then
-                name = playerObject.DisplayName or playerObject.Name
-            end
+            local playerObj = Players:FindFirstChild(targetChar.Name)
+            if playerObj then name = playerObj.DisplayName or playerObj.Name end
         end
+        local visible = isVisible(Camera.CFrame.Position, targetStruct.HitPart)
 
-        -- Check visibility separately to display it accurately
-        local isCurrentlyVisible =
-            isVisible(camera.CFrame.Position, targetStruct.HitPart)
-
-        -- Update Text Drawing properties
-        TargetInfoDrawings.Name.Text = string.format('Name: %s', name)
-        TargetInfoDrawings.Health.Text = string.format(
-            'Health: %s HP',
-            targetHumanoid and math.floor(targetHumanoid.Health) or 'N/A'
-        )
-        TargetInfoDrawings.Visible.Text =
-            string.format('Visible: %s', tostring(isCurrentlyVisible))
-        TargetInfoDrawings.Distance.Text =
-            string.format('Distance: %s M', targetStruct.Distance)
+        TargetInfoDrawings.Name.Text = 'Name: ' .. name
+        TargetInfoDrawings.Health.Text = 'Health: ' .. (targetHum and math.floor(targetHum.Health) or 'N/A') .. ' HP'
+        TargetInfoDrawings.Visible.Text = 'Visible: ' .. tostring(visible)
+        TargetInfoDrawings.Distance.Text = 'Distance: ' .. targetStruct.Distance .. ' M'
     end
 end)
 
--- ====================================================================
--- // FOV CIRCLE TOGGLE
--- ====================================================================
-
--- Keybind to toggle FOV Circle visibility
-userInputService.InputBegan:Connect(function(Input)
+-- // FOV TOGGLE
+UserInputService.InputBegan:Connect(function(Input)
     local SA_CFG = getgenv().silentAim
     local key = Enum.KeyCode[SA_CFG.Keybind] or Enum.KeyCode.RightShift
-
     if Input.KeyCode == key then
         SA_CFG.Fov.Visible = not SA_CFG.Fov.Visible
     end
 end)
 
-warn('Project Delta Silent Aim Loaded')
+warn("Project Delta Silent Aim Loaded")
