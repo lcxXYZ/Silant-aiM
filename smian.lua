@@ -94,11 +94,15 @@ local function getAi()
     return ai
 end
 
+-- ===============================
+-- // FIXED getTarget FUNCTION
+-- ===============================
 local function getTarget(...)
     local SA_CFG = getgenv().silentAim
     local closestTarget, closestDistance = nil, SA_CFG.Fov.Radius
-    local ignoreArgs = {...} -- capture varargs to avoid upvalue issues
+    local ignoreArgs = {...} -- capture varargs for nested functions
 
+    -- nested function now uses ignoreArgs instead of ...
     local function checkTarget(Character, IsPlayer)
         if not Character:FindFirstChild('HumanoidRootPart') then return end
         local HitPart = Character:FindFirstChild(SA_CFG.HitPart)
@@ -123,10 +127,12 @@ local function getTarget(...)
         end
     end
 
+    -- loop through AI characters
     for _, character in pairs(getAi()) do
         checkTarget(character, false)
     end
 
+    -- loop through player characters
     for _, player in pairs(Players:GetPlayers()) do
         if player == LocalPlayer then continue end
         if not isAlive(player) then continue end
@@ -136,6 +142,9 @@ local function getTarget(...)
     return closestTarget
 end
 
+-- ===============================
+-- // Projectile & Prediction
+-- ===============================
 local function solveQuadratic(A, B, C)
     local disc = B^2 - 4*A*C
     if disc < 0 then return nil, nil end
@@ -166,7 +175,9 @@ local function predict(Target, Origin, Speed, Acceleration)
     return Target.Position + (Target.Velocity * time)
 end
 
+-- ===============================
 -- // HOOK
+-- ===============================
 local oldBullet
 oldBullet = hookfunction(Bullet.CreateBullet, function(idk, model, model2, model3, aimPart, idk2, ammoType, tick, recoilPattern)
     local SA_CFG = getgenv().silentAim
@@ -190,7 +201,9 @@ oldBullet = hookfunction(Bullet.CreateBullet, function(idk, model, model2, model
     return oldBullet(idk, model, model2, model3, aimPart, idk2, ammoType, tick, recoilPattern)
 end)
 
+-- ===============================
 -- // TARGET INFO DRAWINGS
+-- ===============================
 local function createInfoLine(yOffset)
     local TI_CFG = getgenv().silentAim.TargetInfo
     local line = draw('Text', {
@@ -219,7 +232,9 @@ local function setTargetInfoVisibility(Visible)
     end
 end
 
+-- ===============================
 -- // FOV Circle
+-- ===============================
 FOVCircle = draw('Circle', {
     Visible = false,
     Filled = false,
@@ -230,7 +245,9 @@ FOVCircle = draw('Circle', {
     ZIndex = 100,
 })
 
+-- ===============================
 -- // UPDATE LOOP
+-- ===============================
 RunService.Heartbeat:Connect(function()
     local SA_CFG = getgenv().silentAim
     local FOV_CFG = SA_CFG.Fov
@@ -265,7 +282,9 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
+-- ===============================
 -- // FOV TOGGLE
+-- ===============================
 UserInputService.InputBegan:Connect(function(Input)
     local SA_CFG = getgenv().silentAim
     local key = Enum.KeyCode[SA_CFG.Keybind] or Enum.KeyCode.RightShift
