@@ -12,15 +12,18 @@ local AiZones = workspace:FindFirstChild("AiZones")
 local success, Bullet = pcall(require, ReplicatedStorage.Modules.FPS.Bullet)
 
 if not hookfunction then
-    return LocalPlayer:Kick("Executor doesn't have hookfunction.")
+    for i = 1, 30 do
+	library:notification({ text = "Executor dosent hve Hook Fun Silantaim amy not work" })
 end
 
 if not Drawing then
-    return LocalPlayer:Kick("Executor doesn't have Drawing.")
+    for i = 1, 30 do
+	library:notification({ text = "No Drwaing Hook" })
 end
 
 if not success then
-    return LocalPlayer:Kick("Couldn't require Bullet module. Make sure the game is loaded.")
+    for i = 1, 30 do
+	library:notification({ text = "Nigger Executor so bad bro" })
 end
 
 -- // Configuration
