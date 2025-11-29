@@ -12,18 +12,14 @@ local AiZones = workspace:FindFirstChild("AiZones")
 local success, Bullet = pcall(require, ReplicatedStorage.Modules.FPS.Bullet)
 
 if not hookfunction then
-    for i = 1, 30 do
-	library:notification({ text = "Executor dosent hve Hook Fun Silantaim amy not work" })
+   
 end
 
 if not Drawing then
-    for i = 1, 30 do
-	library:notification({ text = "No Drwaing Hook" })
+	
 end
 
 if not success then
-    for i = 1, 30 do
-	library:notification({ text = "Nigger Executor so bad bro" })
 end
 
 -- // Configuration
